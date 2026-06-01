@@ -1,4 +1,5 @@
 const pdfParse = require("pdf-parse");
+const mammoth = require("mammoth");
 
 const extractKeywords = (text) => {
   const stopWords = new Set([
@@ -63,31 +64,62 @@ const extractKeywords = (text) => {
   ];
 };
 
+const extractTextFromFile = async (file) => {
+  // PDF
+  if (file.mimetype === "application/pdf") {
+    const pdfData = await pdfParse(file.buffer);
+    return pdfData.text;
+  }
+
+  // DOCX
+  if (
+    file.mimetype ===
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  ) {
+    const result = await mammoth.extractRawText({
+      buffer: file.buffer,
+    });
+
+    return result.value;
+  }
+
+  throw new Error(
+    `${file.originalname}: Only PDF and DOCX files are supported`,
+  );
+};
+
 exports.calculateAtsScore = async (req, res) => {
   try {
-    let jobDescription = req.body.jobDescription || "";
+    let jobDescription = req.body.jobDescription?.trim() || "";
 
     const resumeFiles = req.files?.resumeFiles || [];
-    const jdPdf = req.files?.jobDescriptionPdf?.[0];
+    const jdFile = req.files?.jobDescriptionPdf?.[0];
 
-    if (!jobDescription && !jdPdf) {
+    if (!jobDescription && !jdFile) {
       return res.status(400).json({
         success: false,
-        message: "Provide either Job Description text or Job Description PDF",
+        message:
+          "Provide either Job Description text or upload a PDF/DOCX Job Description file",
       });
     }
 
-    if (resumeFiles.length === 0) {
+    if (!resumeFiles.length) {
       return res.status(400).json({
         success: false,
-        message: "Resume PDFs are required",
+        message: "Resume files are required",
       });
     }
 
-    // JD PDF uploaded
-    if (jdPdf) {
-      const jdData = await pdfParse(jdPdf.buffer);
-      jobDescription = jdData.text;
+    // Extract JD text from uploaded file
+    if (jdFile) {
+      try {
+        jobDescription = await extractTextFromFile(jdFile);
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: error.message,
+        });
+      }
     }
 
     const jdKeywords = extractKeywords(jobDescription);
@@ -103,9 +135,9 @@ exports.calculateAtsScore = async (req, res) => {
 
     for (const file of resumeFiles) {
       try {
-        const pdfData = await pdfParse(file.buffer);
+        const extractedText = await extractTextFromFile(file);
 
-        const resumeText = pdfData.text.toLowerCase().replace(/[^\w\s]/g, " ");
+        const resumeText = extractedText.toLowerCase().replace(/[^\w\s]/g, " ");
 
         const matchedKeywords = jdKeywords.filter((keyword) =>
           resumeText.includes(keyword),
@@ -116,7 +148,7 @@ exports.calculateAtsScore = async (req, res) => {
         );
 
         candidates.push({
-          candidateName: file.originalname.replace(".pdf", ""),
+          candidateName: file.originalname.replace(/\.(pdf|docx)$/i, ""),
           atsScore,
           matchedKeywordsCount: matchedKeywords.length,
           totalKeywords: jdKeywords.length,
@@ -124,12 +156,12 @@ exports.calculateAtsScore = async (req, res) => {
         });
       } catch (error) {
         candidates.push({
-          candidateName: file.originalname.replace(".pdf", ""),
+          candidateName: file.originalname,
           atsScore: 0,
           matchedKeywordsCount: 0,
           totalKeywords: jdKeywords.length,
           matchedKeywords: [],
-          error: "Unable to parse PDF",
+          error: error.message,
         });
       }
     }
@@ -152,8 +184,7 @@ exports.calculateAtsScore = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: "Internal Server Error",
-      error: error.message,
+      message: error.message || "Internal Server Error",
     });
   }
 };

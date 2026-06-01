@@ -9,6 +9,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useState } from "react";
+import toast from "react-hot-toast";
 import api from "../../Hooks/api";
 import AnalysisSections from "./AnalysisSections";
 import ResultsDashboard from "./ResultsDashboard";
@@ -63,6 +64,13 @@ export default function HomePage() {
       setResult(response.data);
     } catch (error) {
       console.error("ATS Error =>", error.response?.data || error.message);
+      toast.error(
+        error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          error?.response?.data ||
+          error?.message ||
+          "Something went wrong. Please try again.",
+      );
     } finally {
       setLoading(false);
       setAnalysis(false);
