@@ -33,7 +33,7 @@ app.use(express.json());
 const atsRoute = require("./routes/resumeAts.route");
 const feedBackRoute = require("./routes/feedback.route");
 
-app.get("/test", (req, res) => {
+app.get("/", (req, res) => {
   res.send("Backend is working 🚀");
 });
 
