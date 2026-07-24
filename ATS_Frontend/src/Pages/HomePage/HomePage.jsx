@@ -9,8 +9,8 @@ import {
   Zap,
 } from "lucide-react";
 import { useState } from "react";
-import toast from "react-hot-toast";
-import api from "../../Hooks/api";
+import { useDispatch, useSelector } from "react-redux";
+import { resetResult, uploadResume } from "../../features/resume/resumeSlice";
 import AnalysisSections from "./AnalysisSections";
 import ResultsDashboard from "./ResultsDashboard";
 
@@ -41,40 +41,28 @@ export default function HomePage() {
   const [resumes, setResumes] = useState([]);
   const [jdFile, setJdFile] = useState(null);
   const [jdText, setJdText] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
+  // const [loading, setLoading] = useState(false);
+  // const [result, setResult] = useState(null);
   const [analysis, setAnalysis] = useState(false);
 
+  const { loading, result, error } = useSelector((state) => state.resume);
+
+  const dispatch = useDispatch();
+
   const handleAnalyze = async () => {
-    try {
-      setLoading(true);
-      setAnalysis(true);
-      const startTime = Date.now();
-      const formData = new FormData();
-      resumes.forEach((resume) => formData.append("resumeFiles", resume));
-      if (jdFile) formData.append("jobDescriptionPdf", jdFile);
-      if (jdText.trim()) formData.append("jobDescription", jdText);
-      const response = await api.post("/v1/resume/ats", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      const elapsed = Date.now() - startTime;
-      await new Promise((resolve) =>
-        setTimeout(resolve, Math.max(5000 - elapsed, 0)),
-      );
-      setResult(response.data);
-    } catch (error) {
-      console.error("ATS Error =>", error.response?.data || error.message);
-      toast.error(
-        error?.response?.data?.message ||
-          error?.response?.data?.error ||
-          error?.response?.data ||
-          error?.message ||
-          "Something went wrong. Please try again.",
-      );
-    } finally {
-      setLoading(false);
-      setAnalysis(false);
-    }
+    setAnalysis(true);
+    const startTime = Date.now();
+    const formData = new FormData();
+    resumes.forEach((resume) => formData.append("resumeFiles", resume));
+    if (jdFile) formData.append("jobDescriptionPdf", jdFile);
+    if (jdText.trim()) formData.append("jobDescription", jdText);
+    dispatch(uploadResume(formData));
+    const elapsed = Date.now() - startTime;
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.max(5000 - elapsed, 0)),
+    );
+
+    setAnalysis(false);
   };
 
   const canAnalyze = resumes.length > 0 && (jdFile || jdText.trim());
@@ -82,7 +70,10 @@ export default function HomePage() {
   return (
     <>
       {analysis && <AnalysisSections />}
-      <ResultsDashboard result={result} onClose={() => setResult(null)} />
+      <ResultsDashboard
+        result={result}
+        onClose={() => dispatch(resetResult())}
+      />
 
       <div
         className="min-h-screen text-white relative overflow-x-hidden"
